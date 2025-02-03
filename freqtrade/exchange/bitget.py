@@ -19,7 +19,10 @@ logger = logging.getLogger(__name__)
 
 class Bitget(Exchange):
     _ft_has: FtHas = {
-        "ohlcv_candle_limit": 180,
+        "ohlcv_candle_limit": 200,
+        # for bitget we will use the historical endpoint for consistency 
+        # and there is no partial candle with the history endpoint
+        "ohlcv_partial_candle": False,
     }
     _ft_has_futures: FtHas = {
         "mark_ohlcv_timeframe": "4h",
@@ -40,6 +43,14 @@ class Bitget(Exchange):
         api = super()._init_ccxt(exchange_config, sync, ccxt_kwargs)
         fetch_ohlcv_unpatched = api.fetch_ohlcv
 
+        # note the ccxt implementation of round_timeframe is incorrect if the timestamp is already rounded
+        def roundup_timeframe(timeframe: str, timestamp: int) -> int:
+            ms = ccxt.Exchange.parse_timeframe(timeframe) * 1000
+            offset = timestamp % ms
+            if offset:
+                timestamp += ms - offset
+            return timestamp
+
         def fetch_ohlcv_patched(
             self,
             symbol: str,
@@ -49,21 +60,17 @@ class Bitget(Exchange):
             params: dict = {},
         ):
             since_adapted = since
-            # to ensure proper alignment, we need to fetch more data to cover the requested time range
+            # to ensure proper alignment, we need to round the since timestamp 
+            # to get around the weird behavior of the bitget API
             if since is not None:
                 ms = ccxt.Exchange.parse_timeframe(timeframe) * 1000
-                since_adapted = since - ms
+                since_adapted = roundup_timeframe(ms)
 
-            raw = fetch_ohlcv_unpatched(symbol, timeframe, since_adapted, limit + 2, params=params)
-            start_i = 0
-            for i in range(len(raw)):
-                if raw[i][0] >= since:
-                    start_i = i
-                    break
-            end_i = start_i + limit
+            params = params or {}
+            # for consistency, always use the history endpoint
+            params["useHistoryEndpoint"] = True
 
-            if start_i > 0 or end_i < len(raw):
-                raw = raw[start_i:end_i]
+            raw = fetch_ohlcv_unpatched(symbol, timeframe, since_adapted, limit, params=params)
             return raw
 
         api.fetch_ohlcv = types.MethodType(fetch_ohlcv_patched, api)
@@ -79,6 +86,7 @@ class Bitget(Exchange):
             CandleType.FUTURES,
             CandleType.FUNDING_RATE,
         ]:
+            # the maximum time query range is 90 days
             futures_time_range_limit = 90 * 24 * 60 * 60  # 90 days in seconds
             limit = min(limit, futures_time_range_limit // timeframe_to_seconds(timeframe))
         return limit
