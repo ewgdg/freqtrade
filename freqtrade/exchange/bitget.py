@@ -45,10 +45,10 @@ class Bitget(Exchange):
 
         # note the ccxt implementation of round_timeframe is incorrect if the timestamp is already rounded
         def roundup_timeframe(timeframe: str, timestamp: int) -> int:
-            ms = ccxt.Exchange.parse_timeframe(timeframe) * 1000
-            offset = timestamp % ms
+            timestamp_ms = ccxt.Exchange.parse_timeframe(timeframe) * 1000
+            offset = timestamp % timestamp_ms
             if offset:
-                timestamp += ms - offset
+                timestamp += timestamp_ms - offset
             return timestamp
 
         def fetch_ohlcv_patched(
@@ -63,8 +63,8 @@ class Bitget(Exchange):
             # to ensure proper alignment, we need to round the since timestamp 
             # to get around the weird behavior of the bitget API
             if since is not None:
-                ms = ccxt.Exchange.parse_timeframe(timeframe) * 1000
-                since_adapted = roundup_timeframe(ms)
+                timestamp_ms = ccxt.Exchange.parse_timeframe(timeframe) * 1000
+                since_adapted = roundup_timeframe(timeframe, timestamp_ms)
 
             params = params or {}
             # for consistency, always use the history endpoint
