@@ -63,8 +63,7 @@ class Bitget(Exchange):
             # to ensure proper alignment, we need to round the since timestamp 
             # to get around the weird behavior of the bitget API
             if since is not None:
-                timestamp_ms = ccxt.Exchange.parse_timeframe(timeframe) * 1000
-                since_adapted = roundup_timeframe(timeframe, timestamp_ms)
+                since_adapted = roundup_timeframe(timeframe, since)
 
             params = params or {}
             # for consistency, always use the history endpoint
